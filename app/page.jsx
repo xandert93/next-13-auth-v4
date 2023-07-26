@@ -1,18 +1,10 @@
-import { getServerSession } from 'next-auth'
-
 import { SignInButton } from '@/components/SignInButton'
 import { SignOutButton } from '@/components/SignOutButton'
-
-import { authOptions } from './api/auth/[...nextauth]/options'
 import { SessionStatus } from '@/components/SessionStatus'
+
 import Link from 'next/link'
 
-const getServerSessionUser = async () => {
-  const session = await getServerSession(authOptions)
-  const user = session?.user // => undefined | foundUser
-
-  return user
-}
+import { getServerSessionUser } from './api/auth/[...nextauth]/utils'
 
 export default async function HomePage() {
   const user = await getServerSessionUser()
@@ -30,14 +22,13 @@ const Dashboard = ({ username, ...user }) => {
       <ul>
         {Object.entries(user).map(([k, v]) => (
           <li key={k}>
-            {k}: {v}
+            {k}: {String(v)}
           </li>
         ))}
       </ul>
 
       <SessionStatus />
       <Link href="/account" children="Account" style={{ display: 'block' }} />
-
       <SignOutButton />
     </>
   )

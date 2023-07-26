@@ -1,8 +1,10 @@
 import CredentialsProvider from 'next-auth/providers/credentials'
+import GoogleProvider from 'next-auth/providers/google'
 
 const users = [
   {
-    _id: '001',
+    _id: 1,
+    email: 'fatcat@gmail.com',
     firstName: 'Fat',
     lastName: 'Cat',
     username: 'fatcat',
@@ -10,7 +12,8 @@ const users = [
     avatarUrl: 'some-url',
   },
   {
-    _id: '002',
+    _id: 2,
+    email: 'kittyliapi@gmail.com',
     firstName: 'Kitty',
     lastName: 'Liapi',
     username: 'lapkitty',
@@ -30,26 +33,64 @@ export const authOptions = {
     CredentialsProvider({
       name: 'Username',
       credentials: {
-        username: { type: 'text' },
-        password: { type: 'password' },
+        username: { type: 'text', label: 'Username:' },
+        password: { type: 'password', label: 'Password:' },
       },
       authorize: async ({ username, password }, req) => {
-        const foundUser = users.find((user) => user.username === username)
+        const foundUser = await User.findOne({ username })
         if (!foundUser) return null
 
-        const isPasswordsMatching = foundUser.password === password
+        const isPasswordsMatching = foundUser.password === password // compare hashish
         if (!isPasswordsMatching) return null
 
         return foundUser // we will add some of its data to JWT payload
       },
     }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_ID,
+      clientSecret: process.env.GOOGLE_SECRET,
+    }),
   ],
 
   callbacks: {
+    signIn: async ({ account, profile, user }) => {
+      // for credentials auth, user => foundUser (above)
+      // for OAuth, user => oauthUser, { id, name, email, image }...we need to manually change this to its matching DB user!
+
+      // account.type can be 'credentials' | 'oauth' | 'email' | 'magiclink'
+      // `profile` only defined for OAuth log in
+
+      if (account.type === 'oauth') {
+        const oAuth = {
+          provider: account.provider,
+          id: account.providerAccountId,
+        }
+
+        let oauthUser = await User.findOne({ oAuth })
+
+        if (!oauthUser) {
+          oauthUser = await new User({
+            oAuth,
+            firstName: profile.given_name,
+            lastName: profile.family_name,
+            email: profile.email,
+            avatarUrl: profile.picture,
+          }).save()
+        }
+
+        // `user` cannot be reassigned to the DB user...my crappy workaround:
+        for (const key in user) delete user[key]
+        for (const key in foundUser) user[key] = oauthUser[key]
+      }
+
+      return true
+    },
+
     jwt: ({ token, user }) => {
       if (user) {
         const tokenUser = {
           _id: user._id,
+          email: user.email,
           avatarUrl: user.avatarUrl,
         }
 
@@ -63,10 +104,9 @@ export const authOptions = {
       // e.g. if client wants to update their post - if token.user._id !== post.author._id, don't allow update
     },
 
-    session: ({ token, session }) => {
+    session: async ({ token, session }) => {
       if (session) {
-        console.log('session inspected + user fetched')
-        const { password, ...foundUser } = users.find((user) => user._id === token.user._id)
+        const { password, ...foundUser } = await User.findById(token.user._id)
         session.user = foundUser
       }
 
