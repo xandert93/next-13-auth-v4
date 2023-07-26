@@ -54,8 +54,8 @@ export const authOptions = {
 
   callbacks: {
     signIn: async ({ account, profile, user }) => {
-      // for credentials auth, user => foundUser (above)
-      // for OAuth, user => oauthUser, { id, name, email, image }...we need to manually change this to its matching DB user!
+      // for credentials auth, user => foundUser (fetched from DB above)
+      // for OAuth, user => oauthUser of { id, name, email, image }...using this info, fetch or create the DB user
 
       // account.type can be 'credentials' | 'oauth' | 'email' | 'magiclink'
       // `profile` only defined for OAuth log in
@@ -69,6 +69,7 @@ export const authOptions = {
         let oauthUser = await User.findOne({ oAuth })
 
         if (!oauthUser) {
+          // following profile fields are specific to google OAuth though. Facebook or GitHub will be different, for example
           oauthUser = await new User({
             oAuth,
             firstName: profile.given_name,
@@ -81,6 +82,9 @@ export const authOptions = {
         // `user` cannot be reassigned to the DB user...my crappy workaround:
         for (const key in user) delete user[key]
         for (const key in foundUser) user[key] = oauthUser[key]
+
+        // `jwt` cb's `user` will now always be a DB user, irrespective of sign in strategy
+        // this means we can add user data predictably to JWT payload
       }
 
       return true
